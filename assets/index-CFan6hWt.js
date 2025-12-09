@@ -168,7 +168,7 @@ Error generating stack: `+e.message+`
   &:hover { background: #1e293b; transform: translateY(-1px); }
   &:active { transform: translateY(0); }
   &:disabled { background: #cbd5e1; cursor: not-allowed; }
-`,Ud=`https://simple-rag-chatbot-0u4n.onrender.com/`;function Wd(){let[e,t]=(0,v.useState)(``),[n,r]=(0,v.useState)(!1),i=(0,v.useRef)(null),[a,o]=(0,v.useState)(()=>{let e=localStorage.getItem(`chat_history`);return e?JSON.parse(e):[{sender:`bot`,text:`**Hello!** 👋 
+`,Ud=`https://simple-rag-chatbot-0u4n.onrender.com/api/chat`;function Wd(){let[e,t]=(0,v.useState)(``),[n,r]=(0,v.useState)(!1),i=(0,v.useRef)(null),[a,o]=(0,v.useState)(()=>{let e=localStorage.getItem(`chat_history`);return e?JSON.parse(e):[{sender:`bot`,text:`**Hello!** 👋 
 I am your intelligent support assistant. 
 
 I can help you with:
