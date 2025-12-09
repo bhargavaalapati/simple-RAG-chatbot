@@ -1,6 +1,6 @@
 // backend/server.js
 import dns from 'node:dns';
-dns.setDefaultResultOrder('ipv4first'); // Fix for WSL connectivity
+dns.setDefaultResultOrder('ipv4first'); 
 
 import 'dotenv/config';
 import express from 'express';
@@ -14,12 +14,10 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
-// Schema
 const faqSchema = new mongoose.Schema({
   question: { type: String, required: true },
   answer: { type: String, required: true },
@@ -28,13 +26,12 @@ const faqSchema = new mongoose.Schema({
 faqSchema.index({ question: 'text', answer: 'text' });
 const FAQ = mongoose.model('FAQ', faqSchema);
 
-// Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // --- Routes ---
 
 app.post('/api/seed', async (req, res) => {
-  const massiveData = [
+    const massiveData = [
     // --- General ---
     { category: "General", question: "What are your hours of operation?", answer: "We are open Monday to Friday, 9:00 AM to 6:00 PM EST. We are closed on weekends and major public holidays." },
     { category: "General", question: "Where are you located?", answer: "Our headquarters is located at 123 Tech Park, Silicon Valley, CA 94000." },
@@ -92,13 +89,13 @@ app.post('/api/seed', async (req, res) => {
     { category: "Misc", question: "What is the meaning of life?", answer: "42. But also, to provide excellent customer support." },
   ];
 
-  try {
-    await FAQ.deleteMany({});
-    await FAQ.insertMany(massiveData);
-    res.json({ message: `Database seeded successfully with ${massiveData.length} entries!` });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    try {
+        await FAQ.deleteMany({});
+        await FAQ.insertMany(massiveData);
+        res.json({ message: "Database seeded!" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.post('/api/chat', async (req, res) => {
@@ -106,17 +103,42 @@ app.post('/api/chat', async (req, res) => {
   if (!query) return res.status(400).json({ error: "Query is required" });
 
   try {
-    // 1. Retrieval (Always happens first)
+    const lowerQuery = query.toLowerCase().trim();
+
+    // 0. BASIC GREETINGS & CAPABILITIES (Instant Response)
+    if (lowerQuery.match(/^(hi|hello|hey|greetings|hola)/)) {
+        return res.json({
+            botResponse: "Hello! 👋 I am your Smart Support Assistant.\n\nI can help you with **Account issues**, **Refunds**, **Shipping**, and **Technical Support**.\n\nHow can I help you today?",
+            contextUsed: [],
+            confidence: "High" 
+        });
+    }
+
+    if (lowerQuery.match(/(what can you do|help|capabilities|assist|list)/)) {
+        return res.json({
+            botResponse: "I can assist you with:\n- **Orders & Shipping** (Tracking, delivery times)\n- **Billing** (Refunds, payment methods)\n- **Account** (Password reset, settings)\n- **Technical Issues**\n\nJust ask me a question like: *\"How do I reset my password?\"*",
+            contextUsed: [],
+            confidence: "High"
+        });
+    }
+
+    // 1. Retrieval
     const contextDocs = await FAQ.find(
       { $text: { $search: query } },
       { score: { $meta: "textScore" } }
     ).sort({ score: { $meta: "textScore" } }).limit(4);
 
+    // --- CALCULATE CONFIDENCE SCORE ---
+    // MongoDB textScore usually ranges from 1.0 (weak) to 5.0+ (strong)
+    const topScore = contextDocs.length > 0 ? contextDocs[0].score : 0;
+    let confidenceLevel = "Low";
+    if (topScore > 2.0) confidenceLevel = "High";
+    else if (topScore > 1.0) confidenceLevel = "Medium";
+
     const contextText = contextDocs.map(d => `Q: ${d.question}\nA: ${d.answer}`).join("\n\n");
 
     // 2. Try Real AI Generation
     try {
-      // If USE_MOCK_AI is explicitly true in .env, throw error to skip to catch block
       if (process.env.USE_MOCK_AI === 'true') throw new Error("Mock Mode Enabled");
 
       const prompt = `
@@ -130,32 +152,31 @@ app.post('/api/chat', async (req, res) => {
         USER: ${query}
       `;
 
-      // Try the Experimental Model (Most likely to be free)
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
       const result = await model.generateContent(prompt);
       const response = await result.response;
       
-      // ✅ SUCCESS: Send Real AI Response
-      res.json({ botResponse: response.text(), contextUsed: contextDocs });
+      res.json({ 
+          botResponse: response.text(), 
+          contextUsed: contextDocs,
+          confidence: confidenceLevel // <--- Sending Score
+      });
 
     } catch (aiError) {
-      // 3. Fallback Logic (Mock AI)
-      console.warn("⚠️ AI Generation failed (or Mock Mode). Falling back to Database match.");
-      console.warn("Error details:", aiError.message);
-
-      // Create a "Smart" Mock response based on the search results
-      let fallbackResponse;
+      console.warn("⚠️ AI Generation failed. Falling back to Database match.");
       
+      let fallbackResponse;
       if (contextDocs.length > 0) {
-        // We found a match in DB, so return that answer directly
-        fallbackResponse = `(Offline Mode): I couldn't connect to the AI brain, but here is what I found in the database:\n\n**${contextDocs[0].answer}**`;
+        fallbackResponse = `(Offline Mode): I couldn't connect to the AI brain, but here is the most relevant info from our database:\n\n**${contextDocs[0].answer}**`;
       } else {
-        // No match in DB either
-        fallbackResponse = `(Offline Mode): I'm sorry, I couldn't find relevant information in our database, and my AI connection is currently down.`;
+        fallbackResponse = `(Offline Mode): I'm sorry, I couldn't find relevant information in our database.`;
       }
 
-      // ✅ SUCCESS (Fallback): Send Database Response
-      res.json({ botResponse: fallbackResponse, contextUsed: contextDocs });
+      res.json({ 
+          botResponse: fallbackResponse, 
+          contextUsed: contextDocs,
+          confidence: confidenceLevel // <--- Sending Score
+      });
     }
 
   } catch (dbError) {
