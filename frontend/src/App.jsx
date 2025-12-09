@@ -5,8 +5,12 @@ import { Send, Bot, User, Loader2, BookOpen, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
-// --- Styled Components ---
+// Automatically use Localhost for development, or the Production URL
+const API_URL = import.meta.env.MODE === 'development' 
+  ? 'http://localhost:5000/api/chat' 
+  : 'https://simple-rag-chatbot-0u4n.onrender.com/api/chat'; // <--- Your Render URL
 
+// --- Styled Components ---
 const Container = styled.div`
   max-width: 900px;
   margin: 40px auto;
@@ -103,7 +107,6 @@ const Bubble = styled.div`
   line-height: 1.6;
   position: relative;
   
-  /* Markdown Styles */
   & p { margin: 0 0 8px 0; &:last-child { margin: 0; } }
   & ul, & ol { margin: 0; padding-left: 20px; margin-bottom: 8px; }
   & strong { font-weight: 600; }
@@ -126,7 +129,7 @@ const SourceBox = styled.div`
   color: #64748b;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   max-width: 100%;
 `;
 
@@ -181,12 +184,6 @@ const SendButton = styled.button`
   &:disabled { background: #cbd5e1; cursor: not-allowed; }
 `;
 
-
-// Automatically use Localhost for development, or the Production URL for deployment
-const API_URL = import.meta.env.MODE === 'development' 
-  ? 'http://localhost:5000/api/chat' 
-  : 'https://simple-rag-chatbot-0u4n.onrender.com/api/chat'; // <-- We will update this URL in Step 4
-
 // --- Main Component ---
 
 function App() {
@@ -194,23 +191,17 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef(null);
 
-  // Lazy initialize messages from LocalStorage
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chat_history');
-    if (saved) {
-      return JSON.parse(saved);
-    } else {
-      return [
-        { 
-          sender: 'bot', 
-          text: '**Hello!** 👋 \nI am your intelligent support assistant. \n\nI can help you with:\n- Billing & Refunds\n- Account Issues\n- Technical Support\n- Shipping Info',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ];
-    }
+    return saved ? JSON.parse(saved) : [
+      { 
+        sender: 'bot', 
+        text: '**Hello!** 👋 \nI am your intelligent support assistant. \n\nI can help you with:\n- Billing & Refunds\n- Account Issues\n- Technical Support\n- Shipping Info',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ];
   });
 
-  // Save to LocalStorage whenever messages change
   useEffect(() => {
     localStorage.setItem('chat_history', JSON.stringify(messages));
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -237,20 +228,21 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(API_URL , { query: userMessage.text });
+      const response = await axios.post(API_URL, { query: userMessage.text });
       
       const botMessage = { 
         sender: 'bot', 
         text: response.data.botResponse, 
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sources: response.data.contextUsed 
+        sources: response.data.contextUsed,
+        confidence: response.data.confidence // <--- CAPTURE CONFIDENCE
       };
       
       setMessages(prev => [...prev, botMessage]);
     } catch {
       setMessages(prev => [...prev, { 
         sender: 'bot', 
-        text: "⚠️ I'm having trouble connecting to the server.", 
+        text: "⚠️ Network Error. The backend might be sleeping (free tier). Please try again in 30 seconds.", 
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
       }]);
     } finally {
@@ -282,20 +274,38 @@ function App() {
             
             <MessageContent isUser={msg.sender === 'user'}>
               <Bubble isUser={msg.sender === 'user'}>
-                {msg.sender === 'bot' ? (
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
-                ) : (
-                  msg.text
-                )}
+                {msg.sender === 'bot' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
               </Bubble>
               
-              {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
-                <SourceBox>
-                  <BookOpen size={14} />
-                  <div>
-                    <strong>Source:</strong> "{msg.sources[0].question}"
-                  </div>
-                </SourceBox>
+              {/* SOURCES & CONFIDENCE DISPLAY */}
+              {msg.sender === 'bot' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {/* 1. Source Link */}
+                  {msg.sources && msg.sources.length > 0 && (
+                    <SourceBox>
+                      <BookOpen size={14} />
+                      <div>
+                        <strong>Source:</strong> "{msg.sources[0].question}"
+                      </div>
+                    </SourceBox>
+                  )}
+                  
+                  {/* 2. Confidence Badge */}
+                  {msg.confidence && (
+                    <SourceBox style={{ marginTop: '0', background: 'transparent', border: 'none', padding: '0' }}>
+                      <span style={{ 
+                        padding: '4px 8px', 
+                        borderRadius: '6px', 
+                        fontSize: '0.7rem',
+                        fontWeight: '600',
+                        background: msg.confidence === 'High' ? '#dcfce7' : (msg.confidence === 'Medium' ? '#fef9c3' : '#fee2e2'),
+                        color: msg.confidence === 'High' ? '#166534' : (msg.confidence === 'Medium' ? '#854d0e' : '#991b1b')
+                      }}>
+                        {msg.confidence} Confidence Match
+                      </span>
+                    </SourceBox>
+                  )}
+                </div>
               )}
 
               <TimeStamp>{msg.timestamp}</TimeStamp>
@@ -311,7 +321,7 @@ function App() {
              <Bubble>
                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
                  <Loader2 size={16} className="animate-spin" /> 
-                 <span>Searching database...</span>
+                 <span>Processing...</span>
                </div>
              </Bubble>
           </MessageRow>
