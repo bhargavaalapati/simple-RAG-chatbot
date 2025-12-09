@@ -185,7 +185,7 @@ const SendButton = styled.button`
 // Automatically use Localhost for development, or the Production URL for deployment
 const API_URL = import.meta.env.MODE === 'development' 
   ? 'http://localhost:5000/api/chat' 
-  : 'https://smart-chatbot-backend.onrender.com/api/chat'; // <-- We will update this URL in Step 4
+  : 'https://simple-rag-chatbot-0u4n.onrender.com/'; // <-- We will update this URL in Step 4
 
 // --- Main Component ---
 
