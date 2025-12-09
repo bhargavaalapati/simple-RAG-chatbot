@@ -1,0 +1,15 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production
+dist
+build
+
+# Env Files (CRITICAL: Do not upload API keys)
+.env
+.DS_Store
