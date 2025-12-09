@@ -181,6 +181,12 @@ const SendButton = styled.button`
   &:disabled { background: #cbd5e1; cursor: not-allowed; }
 `;
 
+
+// Automatically use Localhost for development, or the Production URL for deployment
+const API_URL = import.meta.env.MODE === 'development' 
+  ? 'http://localhost:5000/api/chat' 
+  : 'https://smart-chatbot-backend.onrender.com/api/chat'; // <-- We will update this URL in Step 4
+
 // --- Main Component ---
 
 function App() {
@@ -231,7 +237,7 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/chat', { query: userMessage.text });
+      const response = await axios.post(API_URL , { query: userMessage.text });
       
       const botMessage = { 
         sender: 'bot', 
